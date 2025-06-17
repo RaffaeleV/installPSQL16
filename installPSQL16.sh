@@ -19,11 +19,9 @@ sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-
 sudo dnf -qy module disable postgresql
 sudo dnf install -y postgresql${POSTGRES_VERSION}-server postgresql${POSTGRES_VERSION}-contrib
 
-# Install versionlock plugin if not installed
-if ! rpm -q dnf-plugins-core &>/dev/null; then
-  echo "Installing dnf-plugins-core for versionlock support..."
-  sudo dnf install -y dnf-plugins-core
-fi
+# Install versionlock plugin
+echo "Installing versionlock support..."
+sudo dnf install -y 'dnf-command(versionlock)'
 
 # Lock PostgreSQL packages to prevent unintended upgrades
 sudo dnf versionlock postgresql${POSTGRES_VERSION}*
