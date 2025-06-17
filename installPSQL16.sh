@@ -15,7 +15,7 @@ psqlpassword='Pa$$w0rd'
 
 # --- Prepare Second Disk ---
 
-echo "💾 Preparing second disk ($DATA_DISK) for PostgreSQL data..."
+echo "Preparing second disk ($DATA_DISK) for PostgreSQL data..."
 
 # Create a single partition on the disk
 sudo parted -s "$DATA_DISK" mklabel gpt
@@ -45,7 +45,7 @@ sudo chmod 700 "$PGDATA"
 
 # --- Install PostgreSQL ---
 
-echo "📦 Installing PostgreSQL $POSTGRES_VERSION..."
+echo "Installing PostgreSQL $POSTGRES_VERSION..."
 
 sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
 sudo dnf -qy module disable postgresql
@@ -58,7 +58,7 @@ sudo -u "$PGUSER" /usr/pgsql-${POSTGRES_VERSION}/bin/initdb -D "$PGDATA"
 
 # --- Configuration Changes ---
 
-echo "⚙️ Configuring PostgreSQL..."
+echo "Configuring PostgreSQL..."
 
 CONF="$PGDATA/postgresql.conf"
 HBA="$PGDATA/pg_hba.conf"
@@ -75,7 +75,7 @@ echo "host    all             all             0.0.0.0/0               md5" | sud
 
 # --- Service Setup ---
 
-echo "🔌 Enabling PostgreSQL service..."
+echo "Enabling PostgreSQL service..."
 
 # Update systemd to point to new PGDATA
 PG_SERVICE="/etc/systemd/system/postgresql-${POSTGRES_VERSION}.service.d"
@@ -88,13 +88,13 @@ sudo systemctl enable --now postgresql-${POSTGRES_VERSION}
 
 # --- Set Password ---
 
-echo "🔐 Setting password for postgres user..."
+echo "Setting password for postgres user..."
 sudo -u "$PGUSER" psql -c "ALTER USER postgres WITH PASSWORD '${psqlpassword}';"
 
 # --- Firewall Configuration ---
 
-echo "🔒 Configuring firewall..."
+echo "Configuring firewall..."
 sudo firewall-cmd --zone=public --permanent --add-port=5432/tcp
 sudo firewall-cmd --reload
 
-echo "✅ PostgreSQL $POSTGRES_VERSION installation and configuration complete using separate disk at $DATA_MOUNT."
+echo "PostgreSQL $POSTGRES_VERSION installation and configuration complete using separate disk at $DATA_MOUNT."
