@@ -85,7 +85,7 @@ follow these steps:
 1. On the backup server, run the following PowerShell cmdlet to generate configuration parameters:
    Set-VBRPSQLDatabaseServerLimits -OSType Linux -CPUCount <CPU cores> -RamGb <RAM in GB> -DumpToFile <file path>
    Example:
-   Set-VBRPSQLDatabaseServerLimits -OSType Linux -CPUCount 16 -RamGb 32 -DumpToFile "C:\\config.sql"
+   Set-VBRPSQLDatabaseServerLimits -OSType Linux -CPUCount 16 -RamGb 32 -DumpToFile "C:\config.sql"
 
 2. Copy the generated file (e.g., config.sql) to the Linux machine where PostgreSQL is installed.
 
