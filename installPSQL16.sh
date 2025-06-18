@@ -1,94 +1,107 @@
 #!/bin/bash
+set -e
 
-# PostgreSQL 16 Installation with Data on a Second Disk (Rocky Linux 9)
+# Variables
+DISK="/dev/sdb"
+MOUNT_POINT="/var/lib/pgsql/data"
+PGSQL_PORT=5432
+PGSQL_VERSION=16
+PG_PASSWORD="Pa\$\$w0rd"  # Escape $ for the shell
 
-set -euo pipefail
+echo "[1/8] Partitioning and formatting $DISK..."
+# Create partition (non-interactive)
+echo -e "o\nn\np\n1\n\n\nw" | fdisk $DISK
+PARTITION="${DISK}1"
 
-# --- CONFIGURABLE VARIABLES ---
-DATA_DISK="/dev/sdb"
-DATA_MOUNT="/pgdata"
-POSTGRES_VERSION="16"
-PGUSER="postgres"
-PGDATA="${DATA_MOUNT}/pgsql/${POSTGRES_VERSION}/data"
-psqlpassword='Pa$$w0rd'
+# Wait for partition to be recognized
+udevadm settle
 
-# --- Step 1: Install PostgreSQL ---
-echo "Installing PostgreSQL $POSTGRES_VERSION..."
+# Format and mount
+mkfs.xfs $PARTITION
+mkdir -p $MOUNT_POINT
+mount $PARTITION $MOUNT_POINT
 
-sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-sudo dnf -qy module disable postgresql
-sudo dnf install -y postgresql${POSTGRES_VERSION}-server postgresql${POSTGRES_VERSION}-contrib
+# Persist in fstab
+UUID=$(blkid -s UUID -o value $PARTITION)
+echo "UUID=$UUID $MOUNT_POINT xfs defaults 0 0" >> /etc/fstab
 
-# Install versionlock plugin
-echo "Installing versionlock support..."
-sudo dnf install -y 'dnf-command(versionlock)'
+echo "[2/8] Adding PostgreSQL Yum Repository and Installing PostgreSQL..."
+dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+dnf -qy module disable postgresql
+dnf install -y postgresql${PGSQL_VERSION}-server postgresql${PGSQL_VERSION}-contrib
 
-# Lock PostgreSQL packages to prevent unintended upgrades
-sudo dnf versionlock postgresql${POSTGRES_VERSION}*
+echo "[3/8] Initializing PostgreSQL database on the new disk..."
+/usr/pgsql-${PGSQL_VERSION}/bin/postgresql-${PGSQL_VERSION}-setup initdb
 
-# --- Step 2: Prepare the Second Disk ---
-echo "Preparing second disk ($DATA_DISK) for PostgreSQL data..."
+# Change ownership just to be safe
+chown -R postgres:postgres $MOUNT_POINT
 
-if [ ! -b "$DATA_DISK" ]; then
-    echo "Device $DATA_DISK not found. Aborting."
-    exit 1
-fi
+echo "[4/8] Enabling and starting PostgreSQL service..."
+systemctl enable --now postgresql-${PGSQL_VERSION}
 
-if lsblk "$DATA_DISK" | grep -q part; then
-    echo "$DATA_DISK already has a partition. Skipping partitioning."
+echo "[5/8] Setting PostgreSQL user password..."
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '${PG_PASSWORD}';"
+
+echo "[6/8] Configuring PostgreSQL to listen on all interfaces and enable pg_stat_statements..."
+PG_CONF="/var/lib/pgsql/${PGSQL_VERSION}/data/postgresql.conf"
+HBA_CONF="/var/lib/pgsql/${PGSQL_VERSION}/data/pg_hba.conf"
+
+# Listen on all IPs
+sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" $PG_CONF
+
+# Add pg_stat_statements to preload libraries
+if ! grep -q "shared_preload_libraries" $PG_CONF; then
+  echo "shared_preload_libraries = 'pg_stat_statements'" >> $PG_CONF
 else
-    sudo parted -s "$DATA_DISK" mklabel gpt
-    sudo parted -s "$DATA_DISK" mkpart primary ext4 0% 100%
-    udevadm settle
+  sed -i "s|#*shared_preload_libraries *=.*|shared_preload_libraries = 'pg_stat_statements'|" $PG_CONF
 fi
 
-PART="${DATA_DISK}1"
-if ! blkid "$PART" &>/dev/null; then
-    echo "Formatting partition $PART as ext4..."
-    sudo mkfs.ext4 "$PART"
-fi
+# Recommended additional settings for pg_stat_statements
+echo "pg_stat_statements.max = 10000" >> $PG_CONF
+echo "pg_stat_statements.track = all" >> $PG_CONF
 
-sudo mkdir -p "$DATA_MOUNT"
-UUID=$(sudo blkid -s UUID -o value "$PART")
-grep -q "$DATA_MOUNT" /etc/fstab || echo "UUID=$UUID  $DATA_MOUNT  ext4  defaults  0 2" | sudo tee -a /etc/fstab
-mount | grep -q "$DATA_MOUNT" || sudo mount "$DATA_MOUNT"
+# Allow connections from LAN (adjust subnet as needed)
+echo "host    all             all             192.168.0.0/16            md5" >> $HBA_CONF
 
-# Prepare the PostgreSQL data directory
-sudo mkdir -p "$PGDATA"
-sudo chown -R "$PGUSER:$PGUSER" "$DATA_MOUNT"
-sudo chmod 700 "$PGDATA"
+echo "[7/8] Configuring firewall..."
+firewall-cmd --permanent --add-port=${PGSQL_PORT}/tcp
+firewall-cmd --reload
 
-# --- Step 3: Initialize PostgreSQL Data Directory ---
-echo "Initializing PostgreSQL in $PGDATA..."
-sudo -u "$PGUSER" /usr/pgsql-${POSTGRES_VERSION}/bin/initdb -D "$PGDATA"
+echo "[8/8] Restarting PostgreSQL and creating extension..."
+systemctl restart postgresql-${PGSQL_VERSION}
 
-# --- Step 4: Configure PostgreSQL ---
-CONF="$PGDATA/postgresql.conf"
-HBA="$PGDATA/pg_hba.conf"
+# Enable pg_stat_statements in the default DB
+sudo -u postgres psql -d postgres -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
 
-sudo sed -i "s/^#*max_connections = .*/max_connections = 200/" "$CONF"
-sudo sed -i "s/^#*shared_preload_libraries = .*/shared_preload_libraries = 'pg_stat_statements'/" "$CONF"
-sudo sed -i "s/^#*listen_addresses = .*/listen_addresses = '*'/g" "$CONF"
-echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a "$HBA" > /dev/null
+echo "PostgreSQL setup complete with pg_stat_statements enabled."
 
-# --- Step 5: Override Systemd PGDATA and Start Service ---
-echo "Configuring systemd to use custom PGDATA..."
+# Manual instructions for Veeam PostgreSQL tuning
+cat <<EOF
 
-PG_SERVICE="/etc/systemd/system/postgresql-${POSTGRES_VERSION}.service.d"
-sudo mkdir -p "$PG_SERVICE"
-echo -e "[Service]\nEnvironment=PGDATA=$PGDATA" | sudo tee "$PG_SERVICE/override.conf"
-sudo systemctl daemon-reexec
-sudo systemctl daemon-reload
-sudo systemctl enable --now postgresql-${POSTGRES_VERSION}
+Manual Configuration Required for Veeam Backup & Replication
+------------------------------------------------------------
 
-# --- Step 6: Set postgres password ---
-echo "Setting password for postgres user..."
-sudo -u "$PGUSER" psql -c "ALTER USER postgres WITH PASSWORD '${psqlpassword}';"
+To adjust the configuration of the PostgreSQL instance for optimal use with Veeam Backup & Replication, follow these steps:
 
-# --- Step 7: Open Firewall Port ---
-echo "Opening PostgreSQL port in firewall..."
-sudo firewall-cmd --zone=public --permanent --add-port=5432/tcp
-sudo firewall-cmd --reload
+1. On the backup server, run the following PowerShell cmdlet to generate configuration parameters:
 
-# --- Done ---
-echo "PostgreSQL $POSTGRES_VERSION installed and using $PGDATA on $DATA_DISK."
+   Set-VBRPSQLDatabaseServerLimits -OSType <String> -CPUCount <CPU cores> -RamGb <RAM in GB> -DumpToFile <file path>
+
+   Example:
+   Set-VBRPSQLDatabaseServerLimits -OSType Windows -CPUCount 16 -RamGb 32 -DumpToFile "C:\\config.sql"
+
+2. Copy the generated file (e.g., config.sql) to the Linux machine where PostgreSQL is installed.
+
+3. Apply the configuration using the psql CLI tool:
+
+   psql -U <user> -f <file path>
+
+   Example:
+   psql -U postgres -f "/tmp/config.sql"
+
+This will update PostgreSQL parameters and write them into:
+   postgresql.auto.conf
+
+This file is read automatically at service startup and overrides default settings.
+
+EOF
