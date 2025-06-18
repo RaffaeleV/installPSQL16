@@ -6,7 +6,7 @@ DISK="/dev/sdb"
 MOUNT_POINT="/var/lib/pgsql/data"
 PGSQL_PORT=5432
 PGSQL_VERSION=16
-PG_PASSWORD="Pa\$\$w0rd"  # Escape $ for the shell
+PG_PASSWORD="P455w0rd"  # Note: use /$ to reference $
 
 echo "[1/8] Partitioning and formatting $DISK..."
 # Create partition (non-interactive)
@@ -80,28 +80,22 @@ cat <<EOF
 
 Manual Configuration Required for Veeam Backup & Replication
 ------------------------------------------------------------
-
-To adjust the configuration of the PostgreSQL instance for optimal use with Veeam Backup & Replication, follow these steps:
-
+To adjust the configuration of the PostgreSQL instance for optimal use with Veeam Backup & Replication,
+follow these steps:
 1. On the backup server, run the following PowerShell cmdlet to generate configuration parameters:
-
-   Set-VBRPSQLDatabaseServerLimits -OSType <String> -CPUCount <CPU cores> -RamGb <RAM in GB> -DumpToFile <file path>
-
+   Set-VBRPSQLDatabaseServerLimits -OSType Linux -CPUCount <CPU cores> -RamGb <RAM in GB> -DumpToFile <file path>
    Example:
-   Set-VBRPSQLDatabaseServerLimits -OSType Windows -CPUCount 16 -RamGb 32 -DumpToFile "C:\\config.sql"
+   Set-VBRPSQLDatabaseServerLimits -OSType Linux -CPUCount 16 -RamGb 32 -DumpToFile "C:\\config.sql"
 
 2. Copy the generated file (e.g., config.sql) to the Linux machine where PostgreSQL is installed.
 
 3. Apply the configuration using the psql CLI tool:
-
    psql -U <user> -f <file path>
-
    Example:
    psql -U postgres -f "/tmp/config.sql"
 
 This will update PostgreSQL parameters and write them into:
    postgresql.auto.conf
-
 This file is read automatically at service startup and overrides default settings.
 
 EOF
