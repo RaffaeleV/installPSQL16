@@ -37,25 +37,29 @@ Usage
 =====
 Download the Script:
 
-curl -O https://raw.githubusercontent.com/RaffaeleV/installPSQL16/main/installPSQL16.sh
+  curl -O https://raw.githubusercontent.com/RaffaeleV/installPSQL16/main/installPSQL16.sh
 
 Make it executable:
 
-chmod +x installPSQL16.sh
+  chmod +x installPSQL16.sh
 
 Run the Script:
 
-sudo ./installPSQL16.sh
+  sudo ./installPSQL16.sh
 
 Customization
 =============
 Edit the line
 
-PG_PASSWORD="P455w0rd"
+  PG_PASSWORD="P455w0rd"
 
 to set a secure password for the default postgres user.
 
-Change the subnet (192.168.1.0/24) to match the IP range of your clients.
+Edit the line
+
+  echo "host    all             all             192.168.0.0/16            md5" >> $HBA_CONF
+
+to change the subnet to match the IP range of your clients.
 
 
 
