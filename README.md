@@ -49,7 +49,11 @@ sudo ./installPSQL16.sh
 
 Customization
 =============
-Edit the line PGPASSWORD='P455w0rd' to set a secure password for the default postgres user.
+Edit the line
+
+PG_PASSWORD="P455w0rd"
+
+to set a secure password for the default postgres user.
 
 Change the subnet (192.168.1.0/24) to match the IP range of your clients.
 
