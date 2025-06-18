@@ -3,7 +3,9 @@ Script to automate the installation of PostgreSQL 16 on Rocky Linux for Veeam Ba
 
 Overview
 ========
-This script automates the installation and basic configuration of PostgreSQL 16 on Rocky Linux 9 systems. It is designed to simplify the process of preparing a PostgreSQL environment, including optional tuning and service configuration, in environments where PostgreSQL will be used by Veeam Backup & Replication with PostgreSQL as the configuration database.
+This script automates the installation and basic configuration of PostgreSQL 16 on Rocky Linux 9 systems.
+
+It is designed to simplify the process of preparing a PostgreSQL environment, including tuning and service configuration, in deployments where PostgreSQL will be used by Veeam Backup & Replication as the configuration database.
 
 Features
 ========
