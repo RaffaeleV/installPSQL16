@@ -57,7 +57,7 @@ to set a secure password for the default postgres user.
 
 Change the subnet (192.168.1.0/24) to match the IP range of your clients.
 
-Then apply the resulting SQL configuration manually as instructed in the script.
+
 
 Disclaimer
 ==========
